@@ -15,24 +15,12 @@
 ## 安装
 
 ```bash
-git clone https://github.com/ayaoplus/qijuzhu.git
+curl -fsSL https://raw.githubusercontent.com/ayaoplus/qijuzhu/main/install.sh | bash
 ```
 
-根据你使用的 Agent，将目录放到对应位置：
+自动完成：检测已安装的 Agent（Claude Code / Codex / OpenClaw）→ 克隆到对应 skill 目录 → 创建输出目录 → 生成配置文件。
 
-| Agent | 放置路径 |
-|---|---|
-| Claude Code | `~/.claude/skills/qijuzhu/` |
-| Codex | `~/.codex/skills/qijuzhu/` 或项目内 `.agents/skills/qijuzhu/` |
-| OpenClaw | `~/.openclaw/workspace/skills/qijuzhu/` |
-
-首次运行初始化：
-
-```bash
-node scripts/setup.js
-```
-
-自动探测已安装的工具路径，创建 `~/ai-memory/` 输出目录，生成配置文件 `~/.qiju/config.json`。
+已安装多个 Agent 时，自动建立符号链接共享同一份代码。
 
 ## 使用
 
