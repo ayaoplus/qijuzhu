@@ -1,18 +1,18 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 /**
  * 每日汇总入口
  * 用法：
- *   npm run aggregate              # 汇总今天
- *   npm run aggregate -- 2026-04-19  # 汇总指定日期
+ *   node scripts/aggregate.js              # 汇总今天
+ *   node scripts/aggregate.js 2026-04-19  # 汇总指定日期
  */
 import fs from 'fs';
 import path from 'path';
 import { requireConfig, expandHome, fmt } from './config.js';
-import { ingestClaudeCode, ClaudeSession } from './ingest/claude-code.js';
+import { ingestClaudeCode } from './ingest/claude-code.js';
 import { ingestCodex } from './ingest/codex.js';
 import { ingestOpenClaw } from './ingest/openclaw.js';
 
-function parseDate(arg?: string): Date {
+function parseDate(arg) {
   if (!arg) return new Date();
   const d = new Date(arg + 'T00:00:00');
   if (isNaN(d.getTime())) {
@@ -23,21 +23,16 @@ function parseDate(arg?: string): Date {
 }
 
 // 按项目分组 Claude Code sessions
-function groupByProject(sessions: ClaudeSession[]): Map<string, ClaudeSession[]> {
-  const map = new Map<string, ClaudeSession[]>();
+function groupByProject(sessions) {
+  const map = new Map();
   for (const s of sessions) {
     if (!map.has(s.project)) map.set(s.project, []);
-    map.get(s.project)!.push(s);
+    map.get(s.project).push(s);
   }
   return map;
 }
 
-function buildMarkdown(
-  dateStr: string,
-  claude: Awaited<ReturnType<typeof ingestClaudeCode>>,
-  codex: Awaited<ReturnType<typeof ingestCodex>>,
-  openclaw: Awaited<ReturnType<typeof ingestOpenClaw>>,
-): string {
+function buildMarkdown(dateStr, claude, codex, openclaw) {
   const ct = claude.totals;
   const dt = codex.totals;
   const ot = openclaw.totals;
@@ -48,11 +43,9 @@ function buildMarkdown(
   const totalCache = ct.cacheReadTokens + dt.cachedInputTokens + ot.cacheReadTokens;
   const totalTokens = ct.totalTokens + dt.totalTokens + ot.totalTokens;
 
-  const lines: string[] = [];
+  const lines = [];
 
   lines.push(`# ${dateStr} AI 活动日报\n`);
-
-  // Token 汇总表
   lines.push('## Token 汇总\n');
   lines.push('| 工具 | Sessions | Input | Output | Cache | Total | 费用 |');
   lines.push('|---|---:|---:|---:|---:|---:|---:|');
@@ -68,14 +61,13 @@ function buildMarkdown(
     lines.push(`| OpenClaw | ${ot.sessionCount} | ${fmt(ot.inputTokens)} | ${fmt(ot.outputTokens)} | ${fmt(ot.cacheReadTokens)} | ${fmt(ot.totalTokens)} | ${costStr} |`);
   }
 
-  lines.push(`| **合计** | **${totalSessions}** | **${fmt(totalInput)}** | **${fmt(totalOutput)}** | **${fmt(totalCache)}** | **${fmt(totalTokens)}** | ${ot.costUsd > 0 ? `**$${ot.costUsd.toFixed(4)}**` : '-'} |`);
+  const costTotal = ot.costUsd > 0 ? `**$${ot.costUsd.toFixed(4)}**` : '-';
+  lines.push(`| **合计** | **${totalSessions}** | **${fmt(totalInput)}** | **${fmt(totalOutput)}** | **${fmt(totalCache)}** | **${fmt(totalTokens)}** | ${costTotal} |`);
 
   if (ct.cacheHitRate > 0) {
-    const rate = ct.cacheHitRate;
-    lines.push(`\nCache 命中率（Claude Code）：${rate.toFixed(1)}%`);
+    lines.push(`\nCache 命中率（Claude Code）：${ct.cacheHitRate.toFixed(1)}%`);
   }
 
-  // Claude Code 按项目
   if (claude.sessions.length > 0) {
     lines.push('\n## Claude Code — 今日项目\n');
     const byProject = groupByProject(claude.sessions);
@@ -86,7 +78,6 @@ function buildMarkdown(
     }
   }
 
-  // Codex
   if (codex.sessions.length > 0) {
     lines.push('\n## Codex — 今日工作\n');
     for (const s of codex.sessions) {
@@ -95,7 +86,6 @@ function buildMarkdown(
     }
   }
 
-  // OpenClaw
   if (openclaw.sessions.length > 0) {
     lines.push('\n## OpenClaw — 今日工作\n');
     for (const s of openclaw.sessions) {
@@ -110,27 +100,24 @@ function buildMarkdown(
   }
 
   lines.push(`\n---\n*由 起居注 自动生成 · ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}*`);
-
   return lines.join('\n');
 }
 
-async function run(): Promise<void> {
+async function run() {
   const config = requireConfig();
   const date = parseDate(process.argv[2]);
   const dateStr = date.toISOString().slice(0, 10);
 
   console.log(`正在汇总 ${dateStr} 的 AI 活动...\n`);
 
+  const emptyCodex = { tool: 'codex', date: dateStr, sessions: [], totals: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, sessionCount: 0 } };
+  const emptyClaude = { tool: 'claude_code', date: dateStr, sessions: [], totals: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, sessionCount: 0, cacheHitRate: 0 } };
+  const emptyOpenClaw = { tool: 'openclaw', date: dateStr, sessions: [], totals: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, costUsd: 0, sessionCount: 0 } };
+
   const [claude, codex, openclaw] = await Promise.all([
-    config.tools.claude_code.enabled
-      ? ingestClaudeCode(config.tools.claude_code.path, date)
-      : Promise.resolve({ tool: 'claude_code' as const, date: dateStr, sessions: [], totals: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, sessionCount: 0, cacheHitRate: 0 } }),
-    config.tools.codex.enabled
-      ? ingestCodex(config.tools.codex.path, date)
-      : Promise.resolve({ tool: 'codex' as const, date: dateStr, sessions: [], totals: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, sessionCount: 0 } }),
-    config.tools.openclaw.enabled
-      ? ingestOpenClaw(config.tools.openclaw.path, date)
-      : Promise.resolve({ tool: 'openclaw' as const, date: dateStr, sessions: [], totals: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, costUsd: 0, sessionCount: 0 } }),
+    config.tools.claude_code.enabled ? ingestClaudeCode(config.tools.claude_code.path, date) : emptyClaude,
+    config.tools.codex.enabled ? ingestCodex(config.tools.codex.path, date) : emptyCodex,
+    config.tools.openclaw.enabled ? ingestOpenClaw(config.tools.openclaw.path, date) : emptyOpenClaw,
   ]);
 
   console.log(`Claude Code: ${claude.totals.sessionCount} sessions, ${fmt(claude.totals.totalTokens)} tokens`);

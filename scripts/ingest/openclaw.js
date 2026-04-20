@@ -9,38 +9,7 @@ import path from 'path';
 import readline from 'readline';
 import { expandHome } from '../config.js';
 
-export interface OpenClawSession {
-  sessionId: string;
-  agentId: string;
-  model: string;
-  provider: string;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  totalTokens: number;
-  costUsd: number;
-  firstUserMessage: string;
-  startTime: string;
-  endTime: string;
-}
-
-export interface OpenClawIngestResult {
-  tool: 'openclaw';
-  date: string;
-  sessions: OpenClawSession[];
-  totals: {
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number;
-    cacheWriteTokens: number;
-    totalTokens: number;
-    costUsd: number;
-    sessionCount: number;
-  };
-}
-
-async function parseOpenClawSession(filePath: string, dateStr: string): Promise<OpenClawSession | null> {
+async function parseOpenClawSession(filePath, dateStr) {
   const rl = readline.createInterface({ input: fs.createReadStream(filePath), crlfDelay: Infinity });
 
   let sessionId = path.basename(filePath, '.jsonl');
@@ -54,14 +23,13 @@ async function parseOpenClawSession(filePath: string, dateStr: string): Promise<
 
   for await (const line of rl) {
     if (!line.trim()) continue;
-    let obj: Record<string, unknown>;
+    let obj;
     try { obj = JSON.parse(line); } catch { continue; }
 
-    const ts = (obj.timestamp as string) || '';
+    const ts = obj.timestamp || '';
 
-    // 首行 session 元数据
     if (obj.type === 'session') {
-      sessionId = (obj.id as string) || sessionId;
+      sessionId = obj.id || sessionId;
       if (!startTime) startTime = ts;
       continue;
     }
@@ -70,31 +38,28 @@ async function parseOpenClawSession(filePath: string, dateStr: string): Promise<
     endTime = ts;
 
     if (obj.type === 'message') {
-      const msg = obj.message as Record<string, unknown>;
+      const msg = obj.message;
       if (!msg) continue;
 
-      // 取第一条用户消息
       if (msg.role === 'user' && !firstUserMessage) {
         const content = msg.content;
         if (Array.isArray(content)) {
-          const text = (content as Record<string, unknown>[]).find(c => c.type === 'text');
-          firstUserMessage = ((text?.text as string) || '').slice(0, 120);
+          const text = content.find(c => c.type === 'text');
+          firstUserMessage = (text?.text || '').slice(0, 120);
         } else if (typeof content === 'string') {
           firstUserMessage = content.slice(0, 120);
         }
       }
 
-      // 累加每条 assistant usage
       if (msg.role === 'assistant' && msg.usage) {
-        const usage = msg.usage as Record<string, unknown>;
-        totalInput += (usage.input as number) ?? 0;
-        totalOutput += (usage.output as number) ?? 0;
-        totalCacheRead += (usage.cacheRead as number) ?? 0;
-        totalCacheWrite += (usage.cacheWrite as number) ?? 0;
-        const cost = usage.cost as Record<string, number> | undefined;
-        totalCost += cost?.total ?? 0;
-        if (!model && msg.model) model = msg.model as string;
-        if (!provider && msg.provider) provider = msg.provider as string;
+        const usage = msg.usage;
+        totalInput += usage.input ?? 0;
+        totalOutput += usage.output ?? 0;
+        totalCacheRead += usage.cacheRead ?? 0;
+        totalCacheWrite += usage.cacheWrite ?? 0;
+        totalCost += usage.cost?.total ?? 0;
+        if (!model && msg.model) model = msg.model;
+        if (!provider && msg.provider) provider = msg.provider;
         hasData = true;
       }
     }
@@ -119,21 +84,18 @@ async function parseOpenClawSession(filePath: string, dateStr: string): Promise<
   };
 }
 
-export async function ingestOpenClaw(
-  basePath = '~/.openclaw/agents',
-  date = new Date(),
-): Promise<OpenClawIngestResult> {
+export async function ingestOpenClaw(basePath = '~/.openclaw/agents', date = new Date()) {
   const dateStr = date.toISOString().slice(0, 10);
   const expanded = expandHome(basePath);
 
-  const empty: OpenClawIngestResult = {
+  const empty = {
     tool: 'openclaw', date: dateStr, sessions: [],
     totals: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, costUsd: 0, sessionCount: 0 },
   };
 
   if (!fs.existsSync(expanded)) return empty;
 
-  const sessions: OpenClawSession[] = [];
+  const sessions = [];
 
   for (const agentId of fs.readdirSync(expanded)) {
     const sessionsPath = path.join(expanded, agentId, 'sessions');
@@ -152,19 +114,16 @@ export async function ingestOpenClaw(
     }
   }
 
-  const t = sessions.reduce(
-    (acc, s) => ({
-      inputTokens: acc.inputTokens + s.inputTokens,
-      outputTokens: acc.outputTokens + s.outputTokens,
-      cacheReadTokens: acc.cacheReadTokens + s.cacheReadTokens,
-      cacheWriteTokens: acc.cacheWriteTokens + s.cacheWriteTokens,
-      totalTokens: acc.totalTokens + s.totalTokens,
-      costUsd: acc.costUsd + s.costUsd,
-      sessionCount: acc.sessionCount + 1,
-    }),
-    empty.totals,
-  );
-  t.costUsd = Math.round(t.costUsd * 10000) / 10000;
+  const t = sessions.reduce((acc, s) => ({
+    inputTokens: acc.inputTokens + s.inputTokens,
+    outputTokens: acc.outputTokens + s.outputTokens,
+    cacheReadTokens: acc.cacheReadTokens + s.cacheReadTokens,
+    cacheWriteTokens: acc.cacheWriteTokens + s.cacheWriteTokens,
+    totalTokens: acc.totalTokens + s.totalTokens,
+    costUsd: acc.costUsd + s.costUsd,
+    sessionCount: acc.sessionCount + 1,
+  }), { ...empty.totals });
 
+  t.costUsd = Math.round(t.costUsd * 10000) / 10000;
   return { tool: 'openclaw', date: dateStr, sessions, totals: t };
 }

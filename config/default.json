@@ -1,0 +1,25 @@
+{
+  "output_root": "~/ai-memory",
+  "tools": {
+    "claude_code": {
+      "enabled": true,
+      "path": "~/.claude/projects"
+    },
+    "codex": {
+      "enabled": true,
+      "path": "~/.codex/sessions"
+    },
+    "openclaw": {
+      "enabled": false,
+      "path": "~/.openclaw/agents"
+    }
+  },
+  "summary": {
+    "mode": "basic",
+    "model": "haiku"
+  },
+  "cron": {
+    "enabled": false,
+    "times": ["18:00"]
+  }
+}

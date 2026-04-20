@@ -8,45 +8,16 @@ import path from 'path';
 import readline from 'readline';
 import { expandHome } from '../config.js';
 
-export interface ClaudeSession {
-  sessionId: string;
-  project: string;
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  cacheCreationTokens: number;
-  cacheReadTokens: number;
-  totalTokens: number;
-  firstUserMessage: string;
-  startTime: string;
-  endTime: string;
-}
-
-export interface ClaudeIngestResult {
-  tool: 'claude_code';
-  date: string;
-  sessions: ClaudeSession[];
-  totals: {
-    inputTokens: number;
-    outputTokens: number;
-    cacheCreationTokens: number;
-    cacheReadTokens: number;
-    totalTokens: number;
-    sessionCount: number;
-    cacheHitRate: number;
-  };
-}
-
 // -Users-erik-development-qijuzhu → qijuzhu
-function parseProjectName(dirName: string): string {
+function parseProjectName(dirName) {
   const reconstructed = dirName.replace(/^-/, '/').replace(/-/g, '/');
   return path.basename(reconstructed) || dirName;
 }
 
-async function parseSession(filePath: string, dateStr: string): Promise<ClaudeSession | null> {
+async function parseSession(filePath, dateStr) {
   const rl = readline.createInterface({ input: fs.createReadStream(filePath), crlfDelay: Infinity });
 
-  let lastUsage: Record<string, number> | null = null;
+  let lastUsage = null;
   let firstUserMessage = '';
   let model = '';
   let startTime = '';
@@ -54,32 +25,27 @@ async function parseSession(filePath: string, dateStr: string): Promise<ClaudeSe
 
   for await (const line of rl) {
     if (!line.trim()) continue;
-    let obj: Record<string, unknown>;
+    let obj;
     try { obj = JSON.parse(line); } catch { continue; }
 
-    const ts = (obj.timestamp as string) || '';
+    const ts = obj.timestamp || '';
     if (!ts.startsWith(dateStr)) continue;
     if (!startTime) startTime = ts;
     endTime = ts;
 
-    // 取第一条用户消息作为摘要
     if (obj.type === 'user' && !firstUserMessage) {
-      const content = (obj.message as Record<string, unknown>)?.content;
+      const content = obj.message?.content;
       if (typeof content === 'string') {
         firstUserMessage = content.slice(0, 120);
       } else if (Array.isArray(content)) {
-        const text = (content as Record<string, unknown>[]).find(c => c.type === 'text');
-        firstUserMessage = ((text?.text as string) || '').slice(0, 120);
+        const text = content.find(c => c.type === 'text');
+        firstUserMessage = (text?.text || '').slice(0, 120);
       }
     }
 
-    // 记录最后一条 assistant usage
-    if (obj.type === 'assistant') {
-      const msg = obj.message as Record<string, unknown>;
-      if (msg?.usage) {
-        lastUsage = msg.usage as Record<string, number>;
-        if (msg.model) model = msg.model as string;
-      }
+    if (obj.type === 'assistant' && obj.message?.usage) {
+      lastUsage = obj.message.usage;
+      if (obj.message.model) model = obj.message.model;
     }
   }
 
@@ -105,20 +71,17 @@ async function parseSession(filePath: string, dateStr: string): Promise<ClaudeSe
   };
 }
 
-export async function ingestClaudeCode(
-  basePath = '~/.claude/projects',
-  date = new Date(),
-): Promise<ClaudeIngestResult> {
+export async function ingestClaudeCode(basePath = '~/.claude/projects', date = new Date()) {
   const dateStr = date.toISOString().slice(0, 10);
   const expanded = expandHome(basePath);
-  const empty: ClaudeIngestResult = {
+  const empty = {
     tool: 'claude_code', date: dateStr, sessions: [],
     totals: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, sessionCount: 0, cacheHitRate: 0 },
   };
 
   if (!fs.existsSync(expanded)) return empty;
 
-  const sessions: ClaudeSession[] = [];
+  const sessions = [];
 
   for (const projectDir of fs.readdirSync(expanded)) {
     const projectPath = path.join(expanded, projectDir);
@@ -127,7 +90,6 @@ export async function ingestClaudeCode(
     for (const file of fs.readdirSync(projectPath)) {
       if (!file.endsWith('.jsonl')) continue;
       const filePath = path.join(projectPath, file);
-      // 用 mtime 做快速过滤，避免读太多旧文件
       if (fs.statSync(filePath).mtime.toISOString().slice(0, 10) < dateStr) continue;
 
       const session = await parseSession(filePath, dateStr);
@@ -135,20 +97,16 @@ export async function ingestClaudeCode(
     }
   }
 
-  const t = sessions.reduce(
-    (acc, s) => ({
-      inputTokens: acc.inputTokens + s.inputTokens,
-      outputTokens: acc.outputTokens + s.outputTokens,
-      cacheCreationTokens: acc.cacheCreationTokens + s.cacheCreationTokens,
-      cacheReadTokens: acc.cacheReadTokens + s.cacheReadTokens,
-      totalTokens: acc.totalTokens + s.totalTokens,
-      sessionCount: acc.sessionCount + 1,
-      cacheHitRate: 0,
-    }),
-    empty.totals,
-  );
+  const t = sessions.reduce((acc, s) => ({
+    inputTokens: acc.inputTokens + s.inputTokens,
+    outputTokens: acc.outputTokens + s.outputTokens,
+    cacheCreationTokens: acc.cacheCreationTokens + s.cacheCreationTokens,
+    cacheReadTokens: acc.cacheReadTokens + s.cacheReadTokens,
+    totalTokens: acc.totalTokens + s.totalTokens,
+    sessionCount: acc.sessionCount + 1,
+    cacheHitRate: 0,
+  }), { ...empty.totals });
 
-  // cache hit rate = cacheRead / (input + cacheRead + cacheCreate)
   const denominator = t.inputTokens + t.cacheReadTokens + t.cacheCreationTokens;
   t.cacheHitRate = denominator > 0 ? Math.round((t.cacheReadTokens / denominator) * 1000) / 10 : 0;
 

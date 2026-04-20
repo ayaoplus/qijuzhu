@@ -1,17 +1,17 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 /**
  * 记忆写入工具
  * 将一段文字追加到当月记忆文件 ~/ai-memory/memory/YYYY-MM.md
  *
  * 用法：
- *   npm run remember -- "今天意识到..."
- *   echo "..." | npm run remember
+ *   node scripts/remember.js "今天意识到..."
+ *   echo "..." | node scripts/remember.js
  */
 import fs from 'fs';
 import path from 'path';
 import { requireConfig, expandHome } from './config.js';
 
-async function readStdin(): Promise<string> {
+async function readStdin() {
   if (process.stdin.isTTY) return '';
   return new Promise(resolve => {
     let data = '';
@@ -21,7 +21,7 @@ async function readStdin(): Promise<string> {
   });
 }
 
-async function run(): Promise<void> {
+async function run() {
   const config = requireConfig();
 
   const argContent = process.argv.slice(2).join(' ').trim();
@@ -29,7 +29,7 @@ async function run(): Promise<void> {
   const content = argContent || stdinContent;
 
   if (!content) {
-    console.error('用法：npm run remember -- "要记录的内容"');
+    console.error('用法：node scripts/remember.js "要记录的内容"');
     process.exit(1);
   }
 
@@ -45,7 +45,6 @@ async function run(): Promise<void> {
     fs.writeFileSync(memoryFile, `# 记忆 ${monthStr}\n`, 'utf-8');
   }
 
-  // 同一天多条记录不重复写日期标题
   const existing = fs.readFileSync(memoryFile, 'utf-8');
   const dateHeader = `### ${dateStr}`;
   const entry = existing.includes(dateHeader)

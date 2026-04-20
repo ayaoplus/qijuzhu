@@ -9,75 +9,45 @@ import path from 'path';
 import readline from 'readline';
 import { expandHome } from '../config.js';
 
-export interface CodexSession {
-  sessionId: string;
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  cachedInputTokens: number;
-  reasoningOutputTokens: number;
-  totalTokens: number;
-  startTime: string;
-  endTime: string;
-}
-
-export interface CodexIngestResult {
-  tool: 'codex';
-  date: string;
-  sessions: CodexSession[];
-  totals: {
-    inputTokens: number;
-    outputTokens: number;
-    cachedInputTokens: number;
-    reasoningOutputTokens: number;
-    totalTokens: number;
-    sessionCount: number;
-  };
-}
-
-async function parseCodexSession(filePath: string): Promise<CodexSession | null> {
+async function parseCodexSession(filePath) {
   const rl = readline.createInterface({ input: fs.createReadStream(filePath), crlfDelay: Infinity });
 
   let maxTotal = -1;
-  let bestUsage: Record<string, number> | null = null;
+  let bestUsage = null;
   let model = '';
   let startTime = '';
   let endTime = '';
 
   for await (const line of rl) {
     if (!line.trim()) continue;
-    let obj: Record<string, unknown>;
+    let obj;
     try { obj = JSON.parse(line); } catch { continue; }
 
     if (obj.type !== 'event_msg') continue;
-    const payload = obj.payload as Record<string, unknown>;
+    const payload = obj.payload;
     if (!payload || payload.type !== 'token_count') continue;
-    const info = payload.info as Record<string, unknown> | null;
+    const info = payload.info;
     if (!info) continue;
 
-    const ts = (obj.timestamp as string) || '';
+    const ts = obj.timestamp || '';
     if (!startTime) startTime = ts;
     endTime = ts;
 
-    const usage = info.total_token_usage as Record<string, number>;
+    const usage = info.total_token_usage;
     if (!usage) continue;
 
     const total = usage.total_tokens ?? 0;
     if (total > maxTotal) {
       maxTotal = total;
       bestUsage = usage;
-      const ctx = info.turn_context as Record<string, string> | undefined;
-      if (ctx?.model) model = ctx.model;
+      if (info.turn_context?.model) model = info.turn_context.model;
     }
   }
 
   if (!bestUsage) return null;
 
-  // session ID 从文件名提取：rollout-2026-04-20T10-36-28-<uuid>.jsonl → 日期部分
-  const sessionId = path.basename(filePath, '.jsonl').replace(/^rollout-/, '');
-
   return {
-    sessionId,
+    sessionId: path.basename(filePath, '.jsonl').replace(/^rollout-/, ''),
     model,
     inputTokens: bestUsage.input_tokens ?? 0,
     outputTokens: bestUsage.output_tokens ?? 0,
@@ -89,40 +59,33 @@ async function parseCodexSession(filePath: string): Promise<CodexSession | null>
   };
 }
 
-export async function ingestCodex(
-  basePath = '~/.codex/sessions',
-  date = new Date(),
-): Promise<CodexIngestResult> {
+export async function ingestCodex(basePath = '~/.codex/sessions', date = new Date()) {
   const dateStr = date.toISOString().slice(0, 10);
   const [year, month, day] = dateStr.split('-');
   const dayPath = path.join(expandHome(basePath), year, month, day);
 
-  const empty: CodexIngestResult = {
+  const empty = {
     tool: 'codex', date: dateStr, sessions: [],
     totals: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, sessionCount: 0 },
   };
 
   if (!fs.existsSync(dayPath)) return empty;
 
-  const sessions: CodexSession[] = [];
-
+  const sessions = [];
   for (const file of fs.readdirSync(dayPath)) {
     if (!file.endsWith('.jsonl') || !file.startsWith('rollout-')) continue;
     const session = await parseCodexSession(path.join(dayPath, file));
     if (session) sessions.push(session);
   }
 
-  const t = sessions.reduce(
-    (acc, s) => ({
-      inputTokens: acc.inputTokens + s.inputTokens,
-      outputTokens: acc.outputTokens + s.outputTokens,
-      cachedInputTokens: acc.cachedInputTokens + s.cachedInputTokens,
-      reasoningOutputTokens: acc.reasoningOutputTokens + s.reasoningOutputTokens,
-      totalTokens: acc.totalTokens + s.totalTokens,
-      sessionCount: acc.sessionCount + 1,
-    }),
-    empty.totals,
-  );
+  const t = sessions.reduce((acc, s) => ({
+    inputTokens: acc.inputTokens + s.inputTokens,
+    outputTokens: acc.outputTokens + s.outputTokens,
+    cachedInputTokens: acc.cachedInputTokens + s.cachedInputTokens,
+    reasoningOutputTokens: acc.reasoningOutputTokens + s.reasoningOutputTokens,
+    totalTokens: acc.totalTokens + s.totalTokens,
+    sessionCount: acc.sessionCount + 1,
+  }), { ...empty.totals });
 
   return { tool: 'codex', date: dateStr, sessions, totals: t };
 }
