@@ -8,19 +8,37 @@
 ```bash
 npm run setup
 ```
-首次运行自动探测 Claude Code / Codex / OpenClaw 路径并写配置。
-再次运行显示 health check。
+首次运行：自动探测工具路径、创建输出目录、生成 `index.md` 和 `profile.md` 模板。
+再次运行：显示 health check。
 
 ### 生成今日日报
 ```bash
 npm run aggregate
 ```
-输出到 `~/ai-memory/daily/YYYY-MM-DD.md`（路径由配置决定）。
+输出到 `~/ai-memory/daily/YYYY-MM-DD.md`。
 
 ### 生成指定日期日报
 ```bash
 npm run aggregate -- 2026-04-19
 ```
+
+### 写入记忆
+```bash
+npm run remember -- "今天意识到..."
+echo "..." | npm run remember
+```
+将一段文字追加到当月记忆文件 `~/ai-memory/memory/YYYY-MM.md`。
+AI 在对话结束时提炼关键洞察后调用此命令。
+
+### 画像访谈（AI 执行）
+当用户说"帮我完善画像"或"填写 profile"时，AI 依次询问以下问题，
+收集完整回答后写入 `~/ai-memory/profile.md`：
+1. 你的主要身份 / 角色是什么？
+2. 当前最核心的 1~2 个项目是什么？
+3. 在接受或拒绝一件事时，你最看重什么？
+4. 对你来说，什么比钱更重要？
+5. 你的日常工作节奏是怎样的？有什么固定习惯或忌讳？
+6. 你希望 AI 主动帮你做哪些事？哪些事情你不希望 AI 替你决定？
 
 ## 配置文件
 

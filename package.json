@@ -8,7 +8,8 @@
     "aggregate": "tsx scripts/aggregate.ts",
     "ingest:claude": "tsx scripts/ingest/claude-code.ts",
     "ingest:codex": "tsx scripts/ingest/codex.ts",
-    "ingest:openclaw": "tsx scripts/ingest/openclaw.ts"
+    "ingest:openclaw": "tsx scripts/ingest/openclaw.ts",
+    "remember": "tsx scripts/remember.ts"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"

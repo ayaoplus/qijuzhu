@@ -74,6 +74,16 @@ function run(): void {
   fs.mkdirSync(path.join(outputRoot, 'memory'), { recursive: true });
   console.log(`✅ 输出目录已创建: ${outputRoot}`);
 
+  // 从模板创建 index.md 和 profile.md（不覆盖已有文件）
+  const templateDir = new URL('../templates', import.meta.url).pathname;
+  for (const tpl of ['index.md', 'profile.md']) {
+    const dest = path.join(outputRoot, tpl);
+    if (!fs.existsSync(dest)) {
+      fs.copyFileSync(path.join(templateDir, tpl), dest);
+      console.log(`✅ 已创建: ${dest}`);
+    }
+  }
+
   healthCheck(base);
 }
 
