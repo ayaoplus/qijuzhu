@@ -1,3 +1,18 @@
+---
+name: qijuzhu
+version: 0.1.0
+description: |
+  自动记录每日 AI 活动（Claude Code / Codex / OpenClaw）的 token 统计与工作摘要，沉淀对话记忆。
+  触发场景：生成日报、查看用量、记录想法、填写用户画像、起居注相关操作。
+tags:
+  - productivity
+  - logging
+  - memory
+  - ai-activity
+pluginApi: "1.0"
+minGatewayVersion: "1.0"
+---
+
 # 起居注 (qijuzhu)
 
 自动记录每日 AI 工具活动，沉淀人机对话记忆。
@@ -6,26 +21,26 @@
 
 ### 初始化 / 健康检查
 ```bash
-npm run setup
+node scripts/setup.js
 ```
 首次运行：自动探测工具路径、创建输出目录、生成 `index.md` 和 `profile.md` 模板。
 再次运行：显示 health check。
 
 ### 生成今日日报
 ```bash
-npm run aggregate
+node scripts/aggregate.js
 ```
 输出到 `~/ai-memory/daily/YYYY-MM-DD.md`。
 
 ### 生成指定日期日报
 ```bash
-npm run aggregate -- 2026-04-19
+node scripts/aggregate.js 2026-04-19
 ```
 
 ### 写入记忆
 ```bash
-npm run remember -- "今天意识到..."
-echo "..." | npm run remember
+node scripts/remember.js "今天意识到..."
+echo "..." | node scripts/remember.js
 ```
 将一段文字追加到当月记忆文件 `~/ai-memory/memory/YYYY-MM.md`。
 AI 在对话结束时提炼关键洞察后调用此命令。
@@ -42,27 +57,22 @@ AI 在对话结束时提炼关键洞察后调用此命令。
 
 ## 配置文件
 
-位置：`~/.qiju/config.yaml`（由 setup 自动生成）
+位置：`~/.qiju/config.json`（由 setup 自动生成，可手动修改）
 
-```yaml
-output_root: ~/ai-memory      # 日报和记忆的输出目录
-tools:
-  claude_code:
-    enabled: true
-    path: ~/.claude/projects
-  codex:
-    enabled: true
-    path: ~/.codex/sessions
-  openclaw:
-    enabled: false
-    path: ~/.openclaw/agents
-summary:
-  mode: basic                 # basic（免费）| full（调 Haiku）
-  model: haiku
-cron:
-  enabled: false
-  times: ["18:00"]
+```json
+{
+  "output_root": "~/ai-memory",
+  "tools": {
+    "claude_code": { "enabled": true,  "path": "~/.claude/projects" },
+    "codex":       { "enabled": true,  "path": "~/.codex/sessions"  },
+    "openclaw":    { "enabled": false, "path": "~/.openclaw/agents"  }
+  },
+  "summary": { "mode": "basic", "model": "haiku" },
+  "cron":    { "enabled": false, "times": ["18:00"] }
+}
 ```
+
+`summary.mode` 可选 `basic`（免费）或 `full`（调用 LLM 生成摘要）。
 
 ## 输出目录结构
 
@@ -87,10 +97,13 @@ cron:
 ## 使用场景示例
 
 > 用户：帮我生成今天的 AI 活动日报
-→ 执行 `npm run aggregate`
+→ 执行 `node scripts/aggregate.js`
 
 > 用户：我想看昨天用了多少 token
-→ 执行 `npm run aggregate -- $(date -v-1d +%Y-%m-%d)`
+→ 执行 `node scripts/aggregate.js 2026-04-19`
+
+> 用户：帮我记一下，今天...
+→ 提炼关键内容后执行 `node scripts/remember.js "..."`
 
 > 用户：起居注的配置在哪里
-→ `~/.qiju/config.yaml`
+→ `~/.qiju/config.json`

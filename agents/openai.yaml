@@ -1,0 +1,7 @@
+interface:
+  display_name: "起居注 (qijuzhu)"
+  short_description: "记录每日 AI 活动，沉淀对话记忆"
+  brand_color: "#4A7C6F"
+
+policy:
+  allow_implicit_invocation: true
