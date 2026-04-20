@@ -1,0 +1,26 @@
+# 起居注配置文件
+# 由 `npm run setup` 自动生成到 ~/.qiju/config.yaml，可手动修改
+
+output_root: ~/ai-memory
+
+tools:
+  claude_code:
+    enabled: true
+    path: ~/.claude/projects
+  codex:
+    enabled: true
+    path: ~/.codex/sessions
+  openclaw:
+    enabled: false
+    path: ~/.openclaw/agents
+
+summary:
+  # basic: 零成本，取 session 首条消息作为摘要
+  # full:  调用 LLM 读 transcript 生成摘要（有费用）
+  mode: basic
+  model: haiku
+
+cron:
+  enabled: false
+  times:
+    - "18:00"
